@@ -1,0 +1,40 @@
+@page "/Error/{code:int?}"
+@model BookwormsOnlineSecurity.Pages.Error.StatusCodeModel
+@{
+    Layout = "~/Pages/Shared/_Layout.cshtml";
+    var status = RouteData.Values["code"]?.ToString();
+    var title = status switch
+    {
+        "404" => "Page not found",
+        "403" => "Access denied",
+        "500" => "Server error",
+        _ => "An error occurred"
+    };
+    ViewData["Title"] = title;
+}
+<div class="container mt-5">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h1 class="display-6">@title</h1>
+            <p class="text-muted">@($"Error code: {status ?? "Unknown"}")</p>
+            <p>
+                @switch (status)
+                {
+                    case "404":
+                        @:The page you are looking for could not be found.
+                        break;
+                    case "403":
+                        @:You do not have permission to access this resource.
+                        break;
+                    case "500":
+                        @:Something went wrong on our side. Please try again later.
+                        break;
+                    default:
+                        @:An unexpected error occurred. Please try again.
+                        break;
+                }
+            </p>
+            <a asp-page="/Index" class="btn btn-primary">Back to Home</a>
+        </div>
+    </div>
+</div>
