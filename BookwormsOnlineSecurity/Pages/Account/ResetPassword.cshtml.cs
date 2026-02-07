@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using BookwormsOnlineSecurity.Models;
 using System.ComponentModel.DataAnnotations;
+using System.Text;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace BookwormsOnlineSecurity.Pages.Account
 {
@@ -39,9 +41,24 @@ namespace BookwormsOnlineSecurity.Pages.Account
 
  public async Task<IActionResult> OnPostAsync()
  {
+ if (!ModelState.IsValid) return Page();
  var user = await _userManager.FindByIdAsync(Input.UserId);
  if (user == null) return RedirectToPage("/Account/ResetPasswordConfirmation");
- var result = await _userManager.ResetPasswordAsync(user, Input.Token, Input.NewPassword);
+
+ // Decode token
+ string decodedToken = string.Empty;
+ try
+ {
+ var tokenBytes = WebEncoders.Base64UrlDecode(Input.Token);
+ decodedToken = Encoding.UTF8.GetString(tokenBytes);
+ }
+ catch
+ {
+ ModelState.AddModelError(string.Empty, "Invalid token format.");
+ return Page();
+ }
+
+ var result = await _userManager.ResetPasswordAsync(user, decodedToken, Input.NewPassword);
  if (!result.Succeeded)
  {
  foreach (var e in result.Errors) ModelState.AddModelError(string.Empty, e.Description);
