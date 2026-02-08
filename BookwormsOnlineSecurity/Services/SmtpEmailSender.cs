@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using System.Text.Encodings.Web;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +10,8 @@ namespace BookwormsOnlineSecurity.Services
     {
         private readonly SmtpSettings _settings;
         private readonly ILogger<SmtpEmailSender> _logger;
+        private const int MaxSubjectLength = 200;
+        private const int MaxBodyLength = 4000;
 
         public SmtpEmailSender(IOptions<SmtpSettings> settings, ILogger<SmtpEmailSender> logger)
         {
@@ -35,6 +38,10 @@ namespace BookwormsOnlineSecurity.Services
                 throw new InvalidOperationException("Invalid recipient address.");
             }
 
+            // Neutralize subject/body to avoid transmitting raw user data or sensitive info
+            var safeSubject = SafeTrim(HtmlEncoder.Default.Encode(subject ?? string.Empty), MaxSubjectLength);
+            var safeBody = SafeTrim(HtmlEncoder.Default.Encode(html ?? string.Empty), MaxBodyLength);
+
             using var client = new SmtpClient(_settings.Host, _settings.Port)
             {
                 EnableSsl = _settings.UseSsl,
@@ -45,20 +52,18 @@ namespace BookwormsOnlineSecurity.Services
 
             using var msg = new MailMessage(from, toAddr)
             {
-                Subject = subject,
-                Body = html,
-                IsBodyHtml = true
+                Subject = safeSubject,
+                Body = safeBody,
+                IsBodyHtml = false // send as plain text to avoid inadvertent leakage of HTML content
             };
 
             try
             {
                 await client.SendMailAsync(msg);
-                // Log minimal non-sensitive info only
-                _logger.LogInformation("Sent email with subject '{Subject}' to {Recipient}", subject, MaskEmail(to));
+                _logger.LogInformation("Sent email with subject '{Subject}' to {Recipient}", safeSubject, MaskEmail(to));
             }
             catch (SmtpException ex)
             {
-                // Log the exception but avoid writing sensitive content such as email body or credentials
                 _logger.LogError(ex, "SMTP error while sending email to {Recipient}", MaskEmail(to));
                 throw new InvalidOperationException("Failed to send email. Please try again later.");
             }
@@ -75,17 +80,23 @@ namespace BookwormsOnlineSecurity.Services
             try
             {
                 var parts = email.Split('@');
-                if (parts.Length !=2) return email;
+                if (parts.Length != 2) return email;
                 var local = parts[0];
                 var domain = parts[1];
-                if (local.Length <=2) local = new string('*', local.Length);
-                else local = local.Substring(0,1) + new string('*', Math.Max(1, local.Length -2)) + local[^1];
+                if (local.Length <= 2) local = new string('*', local.Length);
+                else local = local.Substring(0, 1) + new string('*', Math.Max(1, local.Length - 2)) + local[^1];
                 return local + "@" + domain;
             }
             catch
             {
                 return "***@***";
             }
+        }
+
+        private static string SafeTrim(string value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return value.Length <= maxLength ? value : value.Substring(0, maxLength);
         }
     }
 }
