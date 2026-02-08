@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Mail;
 using System.Text.Encodings.Web;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 
@@ -10,8 +11,8 @@ namespace BookwormsOnlineSecurity.Services
     {
         private readonly SmtpSettings _settings;
         private readonly ILogger<SmtpEmailSender> _logger;
-        private const int MaxSubjectLength = 200;
         private const int MaxBodyLength = 4000;
+        private const string DefaultSubject = "Bookworms Online Notification";
 
         public SmtpEmailSender(IOptions<SmtpSettings> settings, ILogger<SmtpEmailSender> logger)
         {
@@ -38,9 +39,10 @@ namespace BookwormsOnlineSecurity.Services
                 throw new InvalidOperationException("Invalid recipient address.");
             }
 
-            // Neutralize subject/body to avoid transmitting raw user data or sensitive info
-            var safeSubject = SafeTrim(HtmlEncoder.Default.Encode(subject ?? string.Empty), MaxSubjectLength);
-            var safeBody = SafeTrim(HtmlEncoder.Default.Encode(html ?? string.Empty), MaxBodyLength);
+            // Use a fixed subject and build a controlled, plain-text body.
+            var safeSubject = DefaultSubject;
+            var link = ExtractFirstHttpLink(html);
+            var safeBody = BuildTemplateBody(link);
 
             using var client = new SmtpClient(_settings.Host, _settings.Port)
             {
@@ -54,7 +56,7 @@ namespace BookwormsOnlineSecurity.Services
             {
                 Subject = safeSubject,
                 Body = safeBody,
-                IsBodyHtml = false // send as plain text to avoid inadvertent leakage of HTML content
+                IsBodyHtml = false
             };
 
             try
@@ -74,10 +76,21 @@ namespace BookwormsOnlineSecurity.Services
             }
         }
 
-        private static string SafeTrim(string value, int maxLength)
+        private static string ExtractFirstHttpLink(string? html)
         {
-            if (string.IsNullOrEmpty(value)) return string.Empty;
-            return value.Length <= maxLength ? value : value.Substring(0, maxLength);
+            if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+            var match = Regex.Match(html, @"https?://[^\s""'<>]+", RegexOptions.IgnoreCase);
+            if (!match.Success) return string.Empty;
+            var encoded = HtmlEncoder.Default.Encode(match.Value);
+            return encoded.Length <= 1000 ? encoded : encoded.Substring(0, 1000);
+        }
+
+        private static string BuildTemplateBody(string link)
+        {
+            var baseText = "If you requested this action, use the link below. If not, ignore this email.";
+            if (string.IsNullOrEmpty(link)) return baseText;
+            var composed = baseText + "\n\n" + link;
+            return composed.Length <= MaxBodyLength ? composed : composed.Substring(0, MaxBodyLength);
         }
     }
 }

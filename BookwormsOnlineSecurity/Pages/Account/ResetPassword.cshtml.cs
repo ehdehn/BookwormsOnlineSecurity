@@ -45,6 +45,13 @@ namespace BookwormsOnlineSecurity.Pages.Account
  var user = await _userManager.FindByIdAsync(Input.UserId);
  if (user == null) return RedirectToPage("/Account/ResetPasswordConfirmation");
 
+ // Block resetting to the current password
+ if (await _userManager.CheckPasswordAsync(user, Input.NewPassword))
+ {
+ ModelState.AddModelError(string.Empty, "New password must be different from the current password.");
+ return Page();
+ }
+
  // Decode token
  string decodedToken = string.Empty;
  try
