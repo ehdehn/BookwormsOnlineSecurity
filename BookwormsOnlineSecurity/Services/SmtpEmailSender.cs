@@ -65,7 +65,7 @@ namespace BookwormsOnlineSecurity.Services
             using var msg = new MailMessage(from, toAddr)
             {
                 Subject = DefaultSubject,
-                Body = body,
+                Body = body, // codeql[cs/sensitive-data-transmission] Password reset link transmission to the account owner is intentional.
                 IsBodyHtml = false
             };
 
