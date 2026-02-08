@@ -34,7 +34,7 @@ namespace BookwormsOnlineSecurity.Services
             }
             catch
             {
-                _logger.LogWarning("Invalid recipient email address provided: {Recipient}", MaskEmail(to));
+                _logger.LogWarning("Invalid recipient email address provided.");
                 throw new InvalidOperationException("Invalid recipient address.");
             }
 
@@ -60,36 +60,17 @@ namespace BookwormsOnlineSecurity.Services
             try
             {
                 await client.SendMailAsync(msg);
-                _logger.LogInformation("Sent email with subject '{Subject}' to {Recipient}", safeSubject, MaskEmail(to));
+                _logger.LogInformation("Email send completed.");
             }
             catch (SmtpException ex)
             {
-                _logger.LogError(ex, "SMTP error while sending email to {Recipient}", MaskEmail(to));
+                _logger.LogError(ex, "SMTP error while sending email.");
                 throw new InvalidOperationException("Failed to send email. Please try again later.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error while sending email to {Recipient}", MaskEmail(to));
+                _logger.LogError(ex, "Unexpected error while sending email.");
                 throw new InvalidOperationException("Failed to send email. Please try again later.");
-            }
-        }
-
-        private static string MaskEmail(string? email)
-        {
-            if (string.IsNullOrEmpty(email)) return string.Empty;
-            try
-            {
-                var parts = email.Split('@');
-                if (parts.Length != 2) return email;
-                var local = parts[0];
-                var domain = parts[1];
-                if (local.Length <= 2) local = new string('*', local.Length);
-                else local = local.Substring(0, 1) + new string('*', Math.Max(1, local.Length - 2)) + local[^1];
-                return local + "@" + domain;
-            }
-            catch
-            {
-                return "***@***";
             }
         }
 
