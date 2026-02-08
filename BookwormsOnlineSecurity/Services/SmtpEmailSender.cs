@@ -1,7 +1,5 @@
 using System.Net;
 using System.Net.Mail;
-using System.Text.Encodings.Web;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 
@@ -11,8 +9,8 @@ namespace BookwormsOnlineSecurity.Services
     {
         private readonly SmtpSettings _settings;
         private readonly ILogger<SmtpEmailSender> _logger;
-        private const int MaxBodyLength = 4000;
-        private const string DefaultSubject = "Bookworms Online Notification";
+        private const int MaxBodyLength = 2000;
+        private const string DefaultSubject = "Bookworms Online - Password Reset";
 
         public SmtpEmailSender(IOptions<SmtpSettings> settings, ILogger<SmtpEmailSender> logger)
         {
@@ -20,7 +18,7 @@ namespace BookwormsOnlineSecurity.Services
             _logger = logger;
         }
 
-        public async Task SendEmailAsync(string to, string subject, string html)
+        public async Task SendPasswordResetAsync(string to, string resetLink)
         {
             if (string.IsNullOrWhiteSpace(_settings.Host) || string.IsNullOrWhiteSpace(_settings.User) || string.IsNullOrWhiteSpace(_settings.Password))
             {
@@ -39,10 +37,22 @@ namespace BookwormsOnlineSecurity.Services
                 throw new InvalidOperationException("Invalid recipient address.");
             }
 
-            // Use a fixed subject and build a controlled, plain-text body.
-            var safeSubject = DefaultSubject;
-            var link = ExtractFirstHttpLink(html);
-            var safeBody = BuildTemplateBody(link);
+            // Validate and constrain the reset link: must be absolute HTTP/HTTPS and not too long
+            if (!Uri.TryCreate(resetLink, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            {
+                _logger.LogWarning("Rejected reset link: not an absolute HTTP/HTTPS URI.");
+                throw new InvalidOperationException("Invalid reset link.");
+            }
+
+            var safeLink = uri.GetLeftPart(UriPartial.Path) + uri.Query + uri.Fragment;
+            if (safeLink.Length > 1500)
+            {
+                _logger.LogWarning("Rejected reset link: too long.");
+                throw new InvalidOperationException("Invalid reset link.");
+            }
+
+            var body = BuildBody(safeLink);
 
             using var client = new SmtpClient(_settings.Host, _settings.Port)
             {
@@ -54,8 +64,8 @@ namespace BookwormsOnlineSecurity.Services
 
             using var msg = new MailMessage(from, toAddr)
             {
-                Subject = safeSubject,
-                Body = safeBody,
+                Subject = DefaultSubject,
+                Body = body,
                 IsBodyHtml = false
             };
 
@@ -76,20 +86,10 @@ namespace BookwormsOnlineSecurity.Services
             }
         }
 
-        private static string ExtractFirstHttpLink(string? html)
+        private static string BuildBody(string link)
         {
-            if (string.IsNullOrWhiteSpace(html)) return string.Empty;
-            var match = Regex.Match(html, @"https?://[^\s""'<>]+", RegexOptions.IgnoreCase);
-            if (!match.Success) return string.Empty;
-            var encoded = HtmlEncoder.Default.Encode(match.Value);
-            return encoded.Length <= 1000 ? encoded : encoded.Substring(0, 1000);
-        }
-
-        private static string BuildTemplateBody(string link)
-        {
-            var baseText = "If you requested this action, use the link below. If not, ignore this email.";
-            if (string.IsNullOrEmpty(link)) return baseText;
-            var composed = baseText + "\n\n" + link;
+            var baseText = "If you requested a password reset, use the link below. If not, ignore this email.";
+            var composed = string.IsNullOrEmpty(link) ? baseText : baseText + "\n\n" + link;
             return composed.Length <= MaxBodyLength ? composed : composed.Substring(0, MaxBodyLength);
         }
     }

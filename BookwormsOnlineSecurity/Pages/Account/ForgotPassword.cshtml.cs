@@ -42,7 +42,7 @@ namespace BookwormsOnlineSecurity.Pages.Account
  var tokenBytes = Encoding.UTF8.GetBytes(token);
  var encodedToken = WebEncoders.Base64UrlEncode(tokenBytes);
  var callback = Url.Page("/Account/ResetPassword", null, new { userId = user.Id, token = encodedToken }, Request.Scheme);
- await _email.SendEmailAsync(user.Email!, "Reset Password", $"Click here to reset: <a href=\"{callback}\">link</a>");
+ await _email.SendPasswordResetAsync(user.Email!, callback);
  return RedirectToPage("/Account/ForgotPasswordConfirmation");
  }
  }

@@ -1,7 +1,7 @@
 namespace BookwormsOnlineSecurity.Services
 {
- public interface IEmailSender
- {
- Task SendEmailAsync(string to, string subject, string html);
- }
+    public interface IEmailSender
+    {
+        Task SendPasswordResetAsync(string to, string resetLink);
+    }
 }
